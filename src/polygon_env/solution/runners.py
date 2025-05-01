@@ -2,12 +2,12 @@
 import os
 import subprocess
 from tempfile import NamedTemporaryFile
-from typing import Protocol, final, override
+from typing import Protocol, override
 
 from polygon_env.utils import format_list
 
 
-class SolutionRunner(Protocol):
+class RunsSolution(Protocol):
     """Protocol defining interface for solution runners."""
 
     def run(self, code: str) -> str:
@@ -27,27 +27,71 @@ class SolutionRunner(Protocol):
         ...
 
 
-@final
-class CompiledSolutionRunner(SolutionRunner):
+class LocalInterpretedSolutionRunner(RunsSolution):
     """
-    Solution runner that compiles code before execution.
+    Solution runner for solutions which runs on interpreter.
 
-    Attributes
-    ----------
-    compile_command
-        Command used to compile the source code.
-        File names should be specified using placeholders: {input_file} for the input source file
-        and {output_file} for the compiled executable output.
-    execute_args
-        Arguments to pass to the compiled executable.
-    executable_name : str
-        Path to the compiled executable.
+    Runs solution on local machine.
     """
 
-    def __init__(self, compile_command: list[str], execute_args: list[str] | None = None):
-        self.compile_command = compile_command
-        self.execute_args = execute_args or []
-        self.executable_name = None
+    def __init__(self, run_command: list[str]):
+        self.run_command: list[str] = run_command
+
+    @override
+    def run(self, code: str) -> str:
+        """
+        Execute the provided source code
+
+        Parameters
+        ----------
+        code
+            The source code to run.
+
+        Returns
+        -------
+        str
+            The output produced by executing the code.
+
+        Examples
+        --------
+        >>> runner = LocalInterpretedSolutionRunner(
+        ...     run_command=["python", "{input_file}"]
+        ... )
+        >>> output = runner.run("print('Hello, World!')")
+        >>> print(output)
+        Hello, World!
+        """
+        with NamedTemporaryFile(mode='r+') as source_file:
+            source_file.write(code)
+            source_file.flush()
+
+            result = subprocess.run(
+                format_list(
+                    self.run_command,
+                    input_file=source_file.name,
+                ),
+                capture_output=True,
+                text=True,
+            )
+
+            if result.returncode != 0:
+                raise subprocess.CalledProcessError(
+                    result.returncode,
+                    self.run_command,
+                    output=result.stdout,
+                    stderr=result.stderr,
+                )
+
+            return result.stdout
+
+
+class LocalCompiledSolutionRunner(RunsSolution):
+    """Solution runner that compiles code before execution on local machine."""
+
+    def __init__(self, compiler_command: list[str], run_args: list[str] | None = None):
+        self.compiler_command: list[str] = compiler_command
+        self.run_args: list[str] = run_args or []
+        self.executable_name: str | None = None
 
     def _compile(self, code: str):
         with NamedTemporaryFile(mode='r+', suffix='.c') as source_file:
@@ -57,7 +101,7 @@ class CompiledSolutionRunner(SolutionRunner):
             with NamedTemporaryFile(mode='wb', delete=False) as executable_file:  # noqa: SIM115
                 result = subprocess.run(
                     format_list(
-                        self.compile_command,
+                        self.compiler_command,
                         input_file=source_file.name,
                         output_file=executable_file.name,
                     ),
@@ -68,7 +112,7 @@ class CompiledSolutionRunner(SolutionRunner):
                 if result.returncode != 0:
                     raise subprocess.CalledProcessError(
                         result.returncode,
-                        self.compile_command,
+                        self.compiler_command,
                         output=result.stdout,
                         stderr=result.stderr,
                     )
@@ -91,18 +135,11 @@ class CompiledSolutionRunner(SolutionRunner):
         str
             The output produced by executing the code.
 
-        Raises
-        ------
-        subprocess.CalledProcessError
-            If compilation fails.
-        AssertionError
-            If executable name is not set after compilation.
-
         Examples
         --------
         >>> runner = CompiledSolutionRunner(
-        ...     compile_command=["gcc", "{input_file}", "-o", "{output_file}"],
-        ...     execute_args=[]
+        ...     compiler_command=["gcc", "{input_file}", "-o", "{output_file}"],
+        ...     run_args=[]
         ... )
         >>> output = runner.run('''
         ... #include <stdio.h>
@@ -119,7 +156,7 @@ class CompiledSolutionRunner(SolutionRunner):
             self._compile(code)
 
         assert self.executable_name
-        binary_output = subprocess.check_output([self.executable_name] + self.execute_args)
+        binary_output = subprocess.check_output([self.executable_name] + self.run_args)
         return binary_output.decode()
 
     def __del__(self):
