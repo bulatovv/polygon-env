@@ -4,13 +4,23 @@ import subprocess
 from tempfile import NamedTemporaryFile
 from typing import Protocol, override
 
+from polygon_env.solution.timemem_limit import LIMIT_256_MB, timemem_limit_run
 from polygon_env.utils import format_list
+
+
+class CompilationError(Exception):
+    """Exception raised when runner fails to compile solution"""
+
+    def __init__(self, stderr: str, exit_code: int):
+        super().__init__(f'Compilation error, exit code {exit_code}\n{stderr}')
+        self.exit_code: int = exit_code
+        self.stderr: str = stderr
 
 
 class RunsSolution(Protocol):
     """Protocol defining interface for solution runners."""
 
-    def run(self, code: str) -> str:
+    def run(self, code: str, timeout_ms: int, max_memory_bytes: int) -> str:
         """
         Run soution code and get it's output
 
@@ -18,6 +28,10 @@ class RunsSolution(Protocol):
         ----------
         code
             The source code to be executed.
+        timeout_ms
+            Max amount of time solution is allowed to run (in milliseconds)
+        max_memory_bytes
+            Max amount of memory solution is allowed to use (in bytes)
 
         Returns
         -------
@@ -38,7 +52,9 @@ class LocalInterpretedSolutionRunner(RunsSolution):
         self.run_command: list[str] = run_command
 
     @override
-    def run(self, code: str) -> str:
+    def run(
+        self, code: str, timeout_ms: int = 1000, max_memory_bytes: int = LIMIT_256_MB
+    ) -> str:
         """
         Execute the provided source code
 
@@ -46,6 +62,10 @@ class LocalInterpretedSolutionRunner(RunsSolution):
         ----------
         code
             The source code to run.
+        timeout_ms
+            Max amount of time solution is allowed to run (in milliseconds)
+        max_memory_bytes
+            Max amount of memory solution is allowed to use (in bytes)
 
         Returns
         -------
@@ -65,40 +85,38 @@ class LocalInterpretedSolutionRunner(RunsSolution):
             source_file.write(code)
             source_file.flush()
 
-            result = subprocess.run(
+            result = timemem_limit_run(
                 format_list(
                     self.run_command,
                     input_file=source_file.name,
                 ),
-                capture_output=True,
-                text=True,
+                timeout_ms=timeout_ms,
+                max_memory_bytes=max_memory_bytes,
             )
 
-            if result.returncode != 0:
-                raise subprocess.CalledProcessError(
-                    result.returncode,
-                    self.run_command,
-                    output=result.stdout,
-                    stderr=result.stderr,
-                )
-
-            return result.stdout
+            return result
 
 
 class LocalCompiledSolutionRunner(RunsSolution):
     """Solution runner that compiles code before execution on local machine."""
 
-    def __init__(self, compiler_command: list[str], run_args: list[str] | None = None):
+    def __init__(
+        self,
+        compiler_command: list[str],
+        source_code_ext: str,
+        run_args: list[str] | None = None,
+    ):
         self.compiler_command: list[str] = compiler_command
         self.run_args: list[str] = run_args or []
         self.executable_name: str | None = None
+        self.source_code_ext: str = source_code_ext
 
     def _compile(self, code: str):
-        with NamedTemporaryFile(mode='r+', suffix='.c') as source_file:
+        with NamedTemporaryFile(mode='r+', suffix=self.source_code_ext) as source_file:
             source_file.write(code)
             source_file.flush()
 
-            with NamedTemporaryFile(mode='wb', delete=False) as executable_file:  # noqa: SIM115
+            with NamedTemporaryFile(mode='wb', delete=False) as executable_file:
                 result = subprocess.run(
                     format_list(
                         self.compiler_command,
@@ -110,18 +128,15 @@ class LocalCompiledSolutionRunner(RunsSolution):
                 )
 
                 if result.returncode != 0:
-                    raise subprocess.CalledProcessError(
-                        result.returncode,
-                        self.compiler_command,
-                        output=result.stdout,
-                        stderr=result.stderr,
-                    )
+                    raise CompilationError(result.stderr, result.returncode)
 
                 os.chmod(executable_file.name, 0o700)
                 self.executable_name = executable_file.name
 
     @override
-    def run(self, code: str) -> str:
+    def run(
+        self, code: str, timeout_ms: int = 1000, max_memory_bytes: int = LIMIT_256_MB
+    ) -> str:
         """
         Compile and execute the provided source code.
 
@@ -129,6 +144,10 @@ class LocalCompiledSolutionRunner(RunsSolution):
         ----------
         code
             The source code to compile and run.
+        timeout_ms
+            Max amount of time solution is allowed to run (in milliseconds)
+        max_memory_bytes
+            Max amount of memory solution is allowed to use (in bytes)
 
         Returns
         -------
@@ -152,20 +171,17 @@ class LocalCompiledSolutionRunner(RunsSolution):
         Hello, World!
         """
 
-        if self.executable_name is None:
-            self._compile(code)
+        self._compile(code)
 
         assert self.executable_name
-        binary_output = subprocess.check_output([self.executable_name] + self.run_args)
-        return binary_output.decode()
+        result = timemem_limit_run(
+            [self.executable_name] + self.run_args,
+            timeout_ms=timeout_ms,
+            max_memory_bytes=max_memory_bytes,
+        )
 
-    def __del__(self):
-        """
-        Clean up by removing the compiled executable file.
+        # cleanup
+        os.remove(self.executable_name)
+        self.executable_name = None
 
-        Notes
-        -----
-        This is called when the object is garbage collected.
-        """
-        if self.executable_name:
-            os.remove(self.executable_name)
+        return result

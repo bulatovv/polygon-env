@@ -18,6 +18,7 @@ classifiers = [
 
 dependencies = [
     "polars>=1.27.1,<2",
+    "psutil>=7.0.0",
 ]
 
 [dependency-groups]
@@ -45,7 +46,10 @@ test = [
 
 
 [build-system]
-requires = ["hatchling", "uv-dynamic-versioning"]
+requires = [
+    "hatchling",
+    "uv-dynamic-versioning",
+]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]

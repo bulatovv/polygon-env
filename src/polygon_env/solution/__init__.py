@@ -1,6 +1,16 @@
 """Code execution system for programming competition solutions."""
 
-from .runners import LocalCompiledSolutionRunner, LocalInterpretedSolutionRunner, RunsSolution
+from .runners import (
+    CompilationError,
+    LocalCompiledSolutionRunner,
+    LocalInterpretedSolutionRunner,
+    RunsSolution,
+)
+from .timemem_limit import (
+    MemoryLimitExceed,
+    RunnerRuntimeError,
+    TimeLimitExceed,
+)
 
 # Move to singleton class?
 _solution_runners_registry = {}
@@ -11,6 +21,7 @@ def register_solution_runner(
     cmd: list[str],
     compiled: bool = False,
     aliases: list[str] | None = None,
+    source_code_ext: str | None = None,
 ):
     """
     Register a solution runner for one or more programming languages.
@@ -28,6 +39,8 @@ def register_solution_runner(
         Whether the solution requires compilation (True) or is interpreted (False)
     aliases
         Optional list of additional language names that should use this runner
+    source_code_ext
+        Extension for source code file (compiled only)
 
     Examples
     --------
@@ -35,7 +48,8 @@ def register_solution_runner(
     ...     'c++',
     ...     ['c++', '-o', '{output_file}', '{input_file}'],
     ...     compiled=True,
-    ...     aliases=['cpp']
+    ...     aliases=['cpp'],
+    ...     source_code_ext='.cpp'
     ... )
     >>> register_solution_runner(
     ...     'python',
@@ -45,7 +59,13 @@ def register_solution_runner(
     """
 
     if compiled:
-        runner = LocalCompiledSolutionRunner(compiler_command=cmd)
+        if source_code_ext is None:
+            raise ValueError(
+                'Source code extension is not provided for compiled solution runner'
+            )
+        runner = LocalCompiledSolutionRunner(
+            compiler_command=cmd, source_code_ext=source_code_ext
+        )
     else:
         runner = LocalInterpretedSolutionRunner(run_command=cmd)
 
@@ -85,11 +105,19 @@ def get_solution_runner(lang: str) -> RunsSolution:
 
 
 register_solution_runner(
-    'c++', cmd=['c++', '-o', '{output_file}', '{input_file}'], aliases=['cpp'], compiled=True
+    'c++',
+    cmd=['c++', '-o', '{output_file}', '{input_file}'],
+    aliases=['cpp'],
+    source_code_ext='.cpp',
+    compiled=True,
 )
 register_solution_runner('python', cmd=['python', '{input_file}'], aliases=['py'])
 
 __all__ = [
     'get_solution_runner',
     'register_solution_runner',
+    'CompilationError',
+    'RunnerRuntimeError',
+    'MemoryLimitExceed',
+    'TimeLimitExceed',
 ]
