@@ -45,7 +45,9 @@ def test_integration_with_real_cc_compiler():
     c_code = """
     #include <stdio.h>
     int main() {
-        printf("Hello from C!\\n");
+        char input[100];
+        fgets(input, sizeof(input), stdin);
+        printf("Hello from C! Input was: %s", input);
         return 0;
     }
     """
@@ -53,20 +55,22 @@ def test_integration_with_real_cc_compiler():
     runner = LocalCompiledSolutionRunner(
         ['cc', '-o', '{output_file}', '{input_file}'], source_code_ext='.c'
     )
-    result = runner.run(c_code)
+    result = runner.run(c_code, solution_input='test input\n')
 
-    assert result == 'Hello from C!\n'
+    assert 'Hello from C! Input was: test input' in result
 
 
 def test_integration_with_compiler_args():
     """Integration test with compiler arguments."""
 
-    # C program that uses math library
+    # C program that uses math library and reads input
     c_code = """
     #include <stdio.h>
     #include <math.h>
     int main() {
-        printf("sqrt(16) = %.1f\\n", sqrt(16.0));
+        double num;
+        scanf("%lf", &num);
+        printf("sqrt(%.1f) = %.1f\\n", num, sqrt(num));
         return 0;
     }
     """
@@ -74,18 +78,21 @@ def test_integration_with_compiler_args():
     runner = LocalCompiledSolutionRunner(
         ['cc', '-o', '{output_file}', '{input_file}', '-lm'], source_code_ext='.c'
     )
-    result = runner.run(c_code)
+    result = runner.run(c_code, solution_input='16.0\n')
 
-    assert result == 'sqrt(16) = 4.0\n'
+    assert result == 'sqrt(16.0) = 4.0\n'
 
 
 def test_integration_with_runtime_args():
     """Integration test with runtime arguments."""
-    # C program that uses command line arguments
+    # C program that uses command line arguments and reads input
     c_code = """
     #include <stdio.h>
     int main(int argc, char *argv[]) {
+        char input[100];
+        fgets(input, sizeof(input), stdin);
         printf("argc = %d\\n", argc);
+        printf("Input: %s", input);
         for (int i = 0; i < argc; i++) {
             printf("argv[%d] = %s\\n", i, argv[i]);
         }
@@ -98,14 +105,15 @@ def test_integration_with_runtime_args():
         source_code_ext='.c',
         run_args=['arg1', 'arg2', 'arg3'],
     )
-    result = runner.run(c_code)
+    result = runner.run(c_code, solution_input='test input\n')
 
     lines = result.strip().split('\n')
     assert lines[0] == 'argc = 4'  # program name + 3 args
-    assert 'argv[0] = ' in lines[1]
-    assert 'argv[1] = arg1' in lines[2]
-    assert 'argv[2] = arg2' in lines[3]
-    assert 'argv[3] = arg3' in lines[4]
+    assert 'Input: test input' in lines[1]
+    assert 'argv[0] = ' in lines[2]
+    assert 'argv[1] = arg1' in lines[3]
+    assert 'argv[2] = arg2' in lines[4]
+    assert 'argv[3] = arg3' in lines[5]
 
 
 def test_interpreted_runner_init():
@@ -116,33 +124,42 @@ def test_interpreted_runner_init():
 
 
 def test_interpreted_runner_simple_output():
-    """Test basic Python code execution."""
-    python_code = "print('Hello World!')"
+    """Test basic Python code execution with input."""
+    python_code = cleandoc("""
+    import sys
+    input_data = sys.stdin.read().strip()
+    print(f'Hello World! Input was: {input_data}')
+    """)
     runner = LocalInterpretedSolutionRunner(['python', '{input_file}'])
-    result = runner.run(python_code)
-    assert result == 'Hello World!\n'
+    result = runner.run(python_code, solution_input='test')
+    assert result == 'Hello World! Input was: test\n'
 
 
 def test_interpreted_runner_multiline_output():
-    """Test multi-line output handling."""
+    """Test multi-line output handling with input processing."""
     python_code = cleandoc("""
-    for i in range(3):
-        print(f"Line {i}")
+    import sys
+    lines = sys.stdin.read().strip().split()
+    for i, line in enumerate(lines):
+        print(f"Line {i}: {line}")
     """)
     runner = LocalInterpretedSolutionRunner(['python', '{input_file}'])
-    result = runner.run(python_code)
-    assert result == 'Line 0\nLine 1\nLine 2\n'
+    result = runner.run(python_code, solution_input='hello world test\n')
+    assert result == 'Line 0: hello\nLine 1: world\nLine 2: test\n'
 
 
 def test_interpreted_runner_with_arguments():
-    """Test command-line argument handling."""
+    """Test command-line argument handling with input."""
     python_code = cleandoc("""
     import sys
+    input_data = sys.stdin.read().strip()
     print("Arguments:", ' '.join(sys.argv[1:]))
+    print("Input:", input_data)
     """)
     runner = LocalInterpretedSolutionRunner(['python', '{input_file}', '--option', 'value'])
-    result = runner.run(python_code)
-    assert result == 'Arguments: --option value\n'
+    result = runner.run(python_code, solution_input='test input')
+    assert 'Arguments: --option value\n' in result
+    assert 'Input: test input\n' in result
 
 
 def test_interpreted_runner_error_handling():
@@ -151,7 +168,7 @@ def test_interpreted_runner_error_handling():
     runner = LocalInterpretedSolutionRunner(['python', '{input_file}'])
 
     with pytest.raises(RunnerRuntimeError) as exc_info:
-        runner.run(python_code)
+        runner.run(python_code, solution_input='')
 
     assert 'NameError' in exc_info.value.stderr
     assert 'undefined_variable' in exc_info.value.stderr
@@ -159,14 +176,17 @@ def test_interpreted_runner_error_handling():
 
 
 def test_interpreted_runner_with_dependencies():
-    """Test execution with external dependencies."""
+    """Test execution with external dependencies and input."""
     python_code = cleandoc("""
     import math
-    print(f"Pi: {math.pi:.2f}")
+    import sys
+    number = float(sys.stdin.read().strip())
+    print(f"Pi: {math.pi:.2f}, Input sqrt: {math.sqrt(number):.2f}")
     """)
     runner = LocalInterpretedSolutionRunner(['python', '{input_file}'])
-    result = runner.run(python_code)
+    result = runner.run(python_code, solution_input='16.0')
     assert 'Pi: 3.14' in result
+    assert 'Input sqrt: 4.00' in result
 
 
 def test_interpreted_runner_syntax_error():
@@ -175,10 +195,63 @@ def test_interpreted_runner_syntax_error():
     runner = LocalInterpretedSolutionRunner(['python', '{input_file}'])
 
     with pytest.raises(RunnerRuntimeError) as exc_info:
-        runner.run(python_code)
+        runner.run(python_code, solution_input='')
 
     assert 'SyntaxError' in exc_info.value.stderr
     assert exc_info.value.exit_code != 0
+
+
+def test_file_based_io_compiled():
+    """Test file-based I/O for compiled solutions."""
+    c_code = """
+    #include <stdio.h>
+    int main() {
+        FILE *input_file = fopen("input.txt", "r");
+        FILE *output_file = fopen("output.txt", "w");
+        
+        char buffer[100];
+        if (input_file && output_file) {
+            fgets(buffer, sizeof(buffer), input_file);
+            fprintf(output_file, "Processed: %s", buffer);
+            fclose(input_file);
+            fclose(output_file);
+        }
+        return 0;
+    }
+    """
+
+    runner = LocalCompiledSolutionRunner(
+        ['cc', '-o', '{output_file}', '{input_file}'], source_code_ext='.c'
+    )
+    result = runner.run(
+        c_code,
+        solution_input='file input data\n',
+        input_file_name='input.txt',
+        output_file_name='output.txt',
+    )
+
+    assert 'Processed: file input data' in result
+
+
+def test_file_based_io_interpreted():
+    """Test file-based I/O for interpreted solutions."""
+    python_code = cleandoc("""
+    with open('input.txt', 'r') as f:
+        data = f.read().strip()
+    
+    with open('output.txt', 'w') as f:
+        f.write(f"Processed: {data.upper()}")
+    """)
+
+    runner = LocalInterpretedSolutionRunner(['python', '{input_file}'])
+    result = runner.run(
+        python_code,
+        solution_input='hello world',
+        input_file_name='input.txt',
+        output_file_name='output.txt',
+    )
+
+    assert 'Processed: HELLO WORLD' in result
 
 
 def test_get_default_runners():
@@ -273,7 +346,7 @@ def test_compilation_error():
     """
 
     with pytest.raises(CompilationError) as exc_info:
-        runner.run(invalid_code)
+        runner.run(invalid_code, solution_input='')
 
     assert exc_info.value.exit_code != 0
 
@@ -284,10 +357,12 @@ def test_time_limit_exceeded_compiled():
         ['cc', '-o', '{output_file}', '{input_file}'], source_code_ext='.c'
     )
 
-    # C code with infinite loop
+    # C code with infinite loop that still reads input
     infinite_loop_code = """
     #include <stdio.h>
     int main() {
+        char buffer[100];
+        fgets(buffer, sizeof(buffer), stdin);  // Read input first
         while(1) {
             // Infinite loop
         }
@@ -297,7 +372,7 @@ def test_time_limit_exceeded_compiled():
 
     timeout_ms = 200
     with pytest.raises(TimeLimitExceed) as exc_info:
-        runner.run(infinite_loop_code, timeout_ms=timeout_ms)
+        runner.run(infinite_loop_code, solution_input='test input\n', timeout_ms=timeout_ms)
 
     # Should timeout
     assert exc_info.value.timeout == timeout_ms
@@ -315,6 +390,9 @@ def test_memory_limit_exceeded_compiled():
     #include <stdlib.h>
     #include <string.h>
     int main() {
+        char buffer[100];
+        fgets(buffer, sizeof(buffer), stdin);  // Read input first
+        
         // Try to allocate 25MB of memory
         size_t alloc_size = 25 * 1024 * 1024; 
         char *ptr = malloc(alloc_size);
@@ -331,7 +409,9 @@ def test_memory_limit_exceeded_compiled():
 
     max_memory_bytes = 1024 * 1024
     with pytest.raises(MemoryLimitExceed) as exc_info:
-        runner.run(memory_hungry_code, max_memory_bytes=max_memory_bytes)
+        runner.run(
+            memory_hungry_code, solution_input='test\n', max_memory_bytes=max_memory_bytes
+        )
 
     # Should fail due to memory limit
     assert exc_info.value.limit == max_memory_bytes
@@ -346,13 +426,15 @@ def test_successful_run_with_time_limit_compiled():
     fast_code = """
     #include <stdio.h>
     int main() {
-        printf("Hello, World!\\n");
+        char input[100];
+        fgets(input, sizeof(input), stdin);
+        printf("Hello, World! Input: %s", input);
         return 0;
     }
     """
 
-    result = runner.run(fast_code, timeout_ms=5000)  # Generous timeout
-    assert result == 'Hello, World!\n'
+    result = runner.run(fast_code, solution_input='test\n', timeout_ms=5000)  # Generous timeout
+    assert 'Hello, World! Input: test' in result
 
 
 def test_successful_run_with_memory_limit_compiled():
@@ -365,13 +447,17 @@ def test_successful_run_with_memory_limit_compiled():
     #include <stdio.h>
     int main() {
         int x = 42;
-        printf("Value: %d\\n", x);
+        char input[100];
+        fgets(input, sizeof(input), stdin);
+        printf("Value: %d, Input: %s", x, input);
         return 0;
     }
     """
 
-    result = runner.run(efficient_code, max_memory_bytes=64 * 1024 * 1024)
-    assert result == 'Value: 42\n'
+    result = runner.run(
+        efficient_code, solution_input='hello\n', max_memory_bytes=64 * 1024 * 1024
+    )
+    assert 'Value: 42, Input: hello' in result
 
 
 def test_time_limit_exceeded_interpreted():
@@ -380,7 +466,9 @@ def test_time_limit_exceeded_interpreted():
 
     # Python code with infinite loop
     infinite_loop_code = cleandoc("""
+        import sys
         import time
+        input_data = sys.stdin.read()  # Read input first
         while True:
             time.sleep(0.001)  # Small sleep to prevent CPU spinning
     """)
@@ -388,7 +476,7 @@ def test_time_limit_exceeded_interpreted():
     timeout_ms = 100
 
     with pytest.raises(TimeLimitExceed) as exc_info:
-        runner.run(infinite_loop_code, timeout_ms=timeout_ms)
+        runner.run(infinite_loop_code, solution_input='test', timeout_ms=timeout_ms)
 
     assert exc_info.value.timeout == timeout_ms
 
@@ -399,6 +487,8 @@ def test_memory_limit_exceeded_interpreted():
 
     # Python code that tries to consume lots of memory
     memory_hungry_code = cleandoc("""
+        import sys
+        input_data = sys.stdin.read()  # Read input first
         # Try to allocate a large list
         big_list = [0] * (100 * 1024 * 1024)
         print("Memory allocated")
@@ -406,7 +496,7 @@ def test_memory_limit_exceeded_interpreted():
 
     max_memory_bytes = 10 * 1024 * 1024
     with pytest.raises(MemoryLimitExceed) as exc_info:
-        runner.run(memory_hungry_code, max_memory_bytes=max_memory_bytes)
+        runner.run(memory_hungry_code, solution_input='test', max_memory_bytes=max_memory_bytes)
     assert exc_info.value.limit == max_memory_bytes
 
 
@@ -415,11 +505,13 @@ def test_successful_run_with_time_limit_interpreted():
     runner = LocalInterpretedSolutionRunner(['python', '{input_file}'])
 
     fast_code = cleandoc("""
-        print("Hello from Python!")
+    import sys
+    input_data = sys.stdin.read().strip()
+    print(f"Hello from Python! Input: {input_data}")
     """)
 
-    result = runner.run(fast_code, timeout_ms=5000)
-    assert result == 'Hello from Python!\n'
+    result = runner.run(fast_code, solution_input='test input', timeout_ms=5000)
+    assert 'Hello from Python! Input: test input' in result
 
 
 def test_successful_run_with_memory_limit_interpreted():
@@ -427,13 +519,17 @@ def test_successful_run_with_memory_limit_interpreted():
     runner = LocalInterpretedSolutionRunner(['python', '{input_file}'])
 
     efficient_code = cleandoc("""
-        x = 42
-        y = "hello"
-        print(f"x={x}, y={y}")
+    import sys
+    input_data = sys.stdin.read().strip()
+    x = 42
+    y = "hello"
+    print(f"x={x}, y={y}, input={input_data}")
     """)
 
-    result = runner.run(efficient_code, max_memory_bytes=64 * 1024 * 1024)  # 64MB limit
-    assert result == 'x=42, y=hello\n'
+    result = runner.run(
+        efficient_code, solution_input='world', max_memory_bytes=64 * 1024 * 1024
+    )  # 64MB limit
+    assert 'x=42, y=hello, input=world' in result
 
 
 def test_compilation_error_with_stderr_info():
@@ -453,7 +549,7 @@ def test_compilation_error_with_stderr_info():
     """
 
     with pytest.raises(CompilationError) as exc_info:
-        runner.run(multi_error_code)
+        runner.run(multi_error_code, solution_input='')
     assert exc_info.value.exit_code != 0
 
 
@@ -463,13 +559,15 @@ def test_runtime_error_handling_interpreted():
 
     # Python code that will cause runtime error
     runtime_error_code = cleandoc("""
-        print("Starting...")
-        x = 1 / 0  # Division by zero
-        print("This won't print")
+    import sys
+    input_data = sys.stdin.read()
+    print("Starting...")
+    x = 1 / 0  # Division by zero
+    print("This won't print")
     """)
 
     with pytest.raises(RunnerRuntimeError) as exc_info:
-        runner.run(runtime_error_code)
+        runner.run(runtime_error_code, solution_input='test')
 
     assert exc_info.value.exit_code != 0
     assert 'ZeroDivisionError' in exc_info.value.stderr
@@ -482,19 +580,22 @@ def test_successful_execution_with_both_limits():
     )
 
     # C code that runs quickly and uses minimal memory
-    simple_code = cleandoc("""
-        #include <stdio.h>
-        int main() {
-            for(int i = 0; i < 10; i++) {
-                printf("%d ", i);
-            }
-            printf("\\n");
-            return 0;
+    simple_code = """
+    #include <stdio.h>
+    int main() {
+        int n;
+        scanf("%d", &n);
+        for(int i = 0; i < n; i++) {
+            printf("%d ", i);
         }
-    """)
+        printf("\\n");
+        return 0;
+    }
+    """
 
     result = runner.run(
         simple_code,
+        solution_input='10\n',
         timeout_ms=2000,  # 2 seconds
         max_memory_bytes=32 * 1024 * 1024,  # 32MB
     )
@@ -507,13 +608,16 @@ def test_interpreted_with_both_limits():
 
     # Python code that completes quickly with minimal memory
     simple_code = cleandoc("""
-        import math
-        result = math.sqrt(16)
-        print(f"Result: {result}")
+    import math
+    import sys
+    number = float(sys.stdin.read().strip())
+    result = math.sqrt(number)
+    print(f"Result: {result}")
     """)
 
     result = runner.run(
         simple_code,
+        solution_input='16.0',
         timeout_ms=3000,  # 3 seconds
         max_memory_bytes=32 * 1024 * 1024,  # 32MB
     )

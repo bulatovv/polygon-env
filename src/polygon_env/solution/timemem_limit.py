@@ -37,8 +37,11 @@ class RunnerRuntimeError(Exception):
 
 def timemem_limit_run(
     cmd: list[str],
+    cmd_input: str,
     timeout_ms: int,
     max_memory_bytes: int,
+    input_file_name: str | None,
+    output_file_name: str | None,
     *,
     poll_interval: float = 0.01,  # 10 ms
 ) -> str:
@@ -49,17 +52,23 @@ def timemem_limit_run(
     ----------
     cmd
         Executable command and its arguments.
+    cmd_input
+        Input data to pass to the running program.
     timeout_ms
         Time limit in milliseconds for wall-clock execution.
     max_memory_bytes
         Maximum allowed resident set size (RSS) in bytes, summed over the entire process tree.
+    input_file_name
+        If provided, solution_input is written to this file, otherwise passed via stdin.
+    output_file_name
+        If provided, output is read from this file, otherwise read from stdout.
     poll_interval
         Interval in seconds between limit checks. Default is 0.01.
 
     Returns
     -------
     str
-        Standard output of the executed command.
+        Output of the executed command (from file or stdout).
 
     Raises
     ------
@@ -72,53 +81,81 @@ def timemem_limit_run(
     """
     start = time.monotonic()
 
-    # launch the user program in its own process group so we can SIGKILL it
-    # together with any children it might spawn
+    # Handle input: write to file or prepare for stdin
+    if input_file_name:
+        with open(input_file_name, 'w') as f:
+            f.write(cmd_input)
+        proc_input = None
+    else:
+        proc_input = cmd_input
+
+    # Launch process
     proc = subprocess.Popen(
         cmd,
+        stdin=subprocess.PIPE if proc_input is not None else None,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        preexec_fn=os.setsid,  # new process group on Unix
+        preexec_fn=os.setsid,
     )
+
+    # Send input to stdin if not using file
+    if proc_input is not None:
+        proc.stdin.write(proc_input)  # pyright: ignore
+        proc.stdin.close()  # pyright: ignore
 
     ps_proc = psutil.Process(proc.pid)
     peak_rss = 0
-
     try:
         while True:
             elapsed_ms = (time.monotonic() - start) * 1000
             if elapsed_ms > timeout_ms:
                 _kill_proc_tree(ps_proc)
                 raise TimeLimitExceed(timeout_ms)
-
             try:
-                # rss for the whole tree (process + children)
                 rss_now = _rss_tree(ps_proc)
                 peak_rss = max(peak_rss, rss_now)
                 if rss_now > max_memory_bytes:
                     _kill_proc_tree(ps_proc)
                     raise MemoryLimitExceed(rss_now, max_memory_bytes)
-            except psutil.NoSuchProcess:  # already terminated
+            except psutil.NoSuchProcess:
                 pass
-
-            # did the program finish?
             if proc.poll() is not None:
-                break  # out of monitoring loop
-
+                break
             time.sleep(poll_interval)
 
-        # program finished normally
-        stdout, stderr = proc.communicate()
+        # Program finished normally - read output manually
+        if proc.stdout is not None:
+            stdout = proc.stdout.read()
+            proc.stdout.close()
+        else:
+            stdout = ''
+
+        if proc.stderr is not None:
+            stderr = proc.stderr.read()
+            proc.stderr.close()
+        else:
+            stderr = ''
 
         if proc.returncode != 0:
             raise RunnerRuntimeError(stderr, proc.returncode)
 
-        return stdout
+        # Handle output from file if specified
+        if output_file_name:
+            with open(output_file_name) as f:
+                result = f.read()
+        else:
+            result = stdout
 
-    finally:  # make absolutely sure no zombie remains
+        return result
+
+    finally:
         if proc.poll() is None:
             _kill_proc_tree(ps_proc)
+        if input_file_name:
+            os.remove(input_file_name)
+        if output_file_name:
+            os.remove(output_file_name)
 
 
 def _rss_tree(ps_proc: psutil.Process) -> int:

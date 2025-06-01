@@ -20,7 +20,15 @@ class CompilationError(Exception):
 class RunsSolution(Protocol):
     """Protocol defining interface for solution runners."""
 
-    def run(self, code: str, timeout_ms: int, max_memory_bytes: int) -> str:
+    def run(
+        self,
+        code: str,
+        solution_input: str,
+        timeout_ms: int,
+        max_memory_bytes: int,
+        input_file_name: str | None = None,
+        output_file_name: str | None = None,
+    ) -> str:
         """
         Run soution code and get it's output
 
@@ -53,7 +61,13 @@ class LocalInterpretedSolutionRunner(RunsSolution):
 
     @override
     def run(
-        self, code: str, timeout_ms: int = 1000, max_memory_bytes: int = LIMIT_256_MB
+        self,
+        code: str,
+        solution_input: str,
+        timeout_ms: int = 1000,
+        max_memory_bytes: int = LIMIT_256_MB,
+        input_file_name: str | None = None,
+        output_file_name: str | None = None,
     ) -> str:
         """
         Execute the provided source code
@@ -90,8 +104,11 @@ class LocalInterpretedSolutionRunner(RunsSolution):
                     self.run_command,
                     input_file=source_file.name,
                 ),
+                cmd_input=solution_input,
                 timeout_ms=timeout_ms,
                 max_memory_bytes=max_memory_bytes,
+                input_file_name=input_file_name,
+                output_file_name=output_file_name,
             )
 
             return result
@@ -135,7 +152,13 @@ class LocalCompiledSolutionRunner(RunsSolution):
 
     @override
     def run(
-        self, code: str, timeout_ms: int = 1000, max_memory_bytes: int = LIMIT_256_MB
+        self,
+        code: str,
+        solution_input: str,
+        timeout_ms: int = 1000,
+        max_memory_bytes: int = LIMIT_256_MB,
+        input_file_name: str | None = None,
+        output_file_name: str | None = None,
     ) -> str:
         """
         Compile and execute the provided source code.
@@ -176,8 +199,11 @@ class LocalCompiledSolutionRunner(RunsSolution):
         assert self.executable_name
         result = timemem_limit_run(
             [self.executable_name] + self.run_args,
+            cmd_input=solution_input,
             timeout_ms=timeout_ms,
             max_memory_bytes=max_memory_bytes,
+            input_file_name=input_file_name,
+            output_file_name=output_file_name,
         )
 
         # cleanup
