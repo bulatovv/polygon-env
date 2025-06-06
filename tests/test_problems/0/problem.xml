@@ -1,0 +1,84 @@
+<?xml version = "1.0" encoding = "utf-8" ?>
+<problem
+	version = "1.0"
+	id = "ru.olymp.team.spb.2024.a-div-b"
+>
+	<judging>
+		<script type = "%icpc">
+			<testset
+				input-name = "*"
+				output-name = "*"
+				input-href = "tests/##"
+				answer-href = "tests/##.a"
+				time-limit = "1.0s"
+				memory-limit = "536870912"
+				test-count = "32"
+			>
+			</testset>
+			<verifier type = "%testlib">
+				<binary executable-id = "x86.exe.win32" file = "check.exe" />
+			</verifier>
+		</script>
+		<script type = "%ioi">
+			<testset
+				name = "preliminary"
+				input-name = "*"
+				output-name = "*"
+				input-href = "tests/##"
+				answer-href = "tests/##.a"
+				time-limit = "1.0s"
+				memory-limit = "536870912"
+			>
+				<test comment = "generated cmd: 'generator -n 1'" />
+				<test comment = "generated cmd: 'generator -n 2'" />
+				<test comment = "manual cmd: ''" />
+			</testset>
+			<testset
+				name = "main"
+				feedback = "outcome"
+				input-name = "*"
+				output-name = "*"
+				input-href = "tests/##"
+				answer-href = "tests/##.a"
+				time-limit = "1.0s"
+				memory-limit = "536870912"
+			>
+				<test points = "0" comment = "generated cmd: 'generator -n 1'" />
+				<test points = "0" comment = "generated cmd: 'generator -n 2'" />
+				<test points = "0" comment = "manual cmd: ''" />
+				<test points = "0" comment = "generated cmd: 'generator -n 3'" />
+				<test points = "0" comment = "generated cmd: 'generator -n 4'" />
+				<test points = "0" comment = "generated cmd: 'generator -n 5'" />
+				<test points = "0" comment = "generated cmd: 'generator -n 6'" />
+				<test points = "0" comment = "generated cmd: 'generator -n 7'" />
+				<test points = "0" comment = "generated cmd: 'generator -n 8'" />
+				<test points = "0" comment = "generated cmd: 'generator -n 9'" />
+				<test points = "0" comment = "generated cmd: 'generator -n 10'" />
+				<test points = "0" comment = "generated cmd: 'generator -n 11'" />
+				<test points = "0" comment = "generated cmd: 'generator -n 12'" />
+				<test points = "0" comment = "generated cmd: 'generator -n 13'" />
+				<test points = "0" comment = "generated cmd: 'generator -n 14'" />
+				<test points = "0" comment = "generated cmd: 'generator -n 15'" />
+				<test points = "0" comment = "generated cmd: 'generator -n 16'" />
+				<test points = "0" comment = "generated cmd: 'generator -n 17'" />
+				<test points = "0" comment = "generated cmd: 'generatorTwoFive -two 10 -five 0'" />
+				<test points = "0" comment = "generated cmd: 'generatorTwoFive -two 11 -five 0'" />
+				<test points = "0" comment = "generated cmd: 'generatorTwoFive -two 12 -five 0'" />
+				<test points = "0" comment = "generated cmd: 'generatorTwoFive -two 13 -five 0'" />
+				<test points = "0" comment = "generated cmd: 'generatorTwoFive -two 14 -five 0'" />
+				<test points = "0" comment = "generated cmd: 'generatorTwoFive -two 15 -five 0'" />
+				<test points = "0" comment = "generated cmd: 'generatorTwoFive -two 16 -five 0'" />
+				<test points = "0" comment = "generated cmd: 'generatorTwoFive -two 0 -five 10'" />
+				<test points = "0" comment = "generated cmd: 'generatorTwoFive -two 0 -five 11'" />
+				<test points = "0" comment = "generated cmd: 'generatorTwoFive -two 0 -five 12'" />
+				<test points = "0" comment = "generated cmd: 'generatorTwoFive -two 0 -five 13'" />
+				<test points = "0" comment = "generated cmd: 'generatorTwoFive -two 0 -five 14'" />
+				<test points = "0" comment = "generated cmd: 'generatorTwoFive -two 0 -five 15'" />
+				<test points = "0" comment = "generated cmd: 'generatorTwoFive -two 0 -five 16'" />
+			</testset>
+			<verifier type = "%testlib">
+				<binary executable-id = "x86.exe.win32" file = "check.exe" />
+			</verifier>
+		</script>
+	</judging>
+</problem>

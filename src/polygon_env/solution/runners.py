@@ -1,6 +1,8 @@
 # TODO: support execution on remote hosts (ssh, firecracker VM)
+import contextlib
 import os
 import subprocess
+from collections import OrderedDict
 from tempfile import NamedTemporaryFile
 from typing import Protocol, override
 
@@ -127,13 +129,18 @@ class LocalCompiledSolutionRunner(RunsSolution):
         self.run_args: list[str] = run_args or []
         self.executable_name: str | None = None
         self.source_code_ext: str = source_code_ext
+        self._compile_cache: OrderedDict[str, bytes] = OrderedDict()
 
-    def _compile(self, code: str):
+    def _compile(self, code: str) -> bytes:
+        if code in self._compile_cache:
+            return self._compile_cache[code]
+
         with NamedTemporaryFile(mode='r+', suffix=self.source_code_ext) as source_file:
             source_file.write(code)
             source_file.flush()
 
             with NamedTemporaryFile(mode='wb', delete=False) as executable_file:
+                temp_name = executable_file.name
                 result = subprocess.run(
                     format_list(
                         self.compiler_command,
@@ -147,8 +154,30 @@ class LocalCompiledSolutionRunner(RunsSolution):
                 if result.returncode != 0:
                     raise CompilationError(result.stderr, result.returncode)
 
-                os.chmod(executable_file.name, 0o700)
-                self.executable_name = executable_file.name
+        with open(temp_name, 'rb') as f:
+            binary = f.read()
+            self._cache_compilation(code, binary)
+
+        os.unlink(temp_name)
+        return binary
+
+    def _cache_compilation(self, code: str, binary: bytes):
+        if code not in self._compile_cache:
+            self._compile_cache[code] = binary
+        if len(self._compile_cache) > 32:
+            _ = self._compile_cache.popitem(last=False)
+
+    @contextlib.contextmanager
+    def _temp_checker_executable(self, binary: bytes):
+        try:
+            with NamedTemporaryFile(mode='wb', delete=False) as checker_executable_file:
+                temp_name = checker_executable_file.name
+                checker_executable_file.write(binary)
+                checker_executable_file.flush()
+            os.chmod(temp_name, 0o700)
+            yield temp_name
+        finally:
+            os.unlink(temp_name)  # pyright: ignore
 
     @override
     def run(
@@ -194,20 +223,16 @@ class LocalCompiledSolutionRunner(RunsSolution):
         Hello, World!
         """
 
-        self._compile(code)
+        binary = self._compile(code)
 
-        assert self.executable_name
-        result = timemem_limit_run(
-            [self.executable_name] + self.run_args,
-            cmd_input=solution_input,
-            timeout_ms=timeout_ms,
-            max_memory_bytes=max_memory_bytes,
-            input_file_name=input_file_name,
-            output_file_name=output_file_name,
-        )
-
-        # cleanup
-        os.remove(self.executable_name)
-        self.executable_name = None
+        with self._temp_checker_executable(binary) as executable_file_name:
+            result = timemem_limit_run(
+                [executable_file_name] + self.run_args,
+                cmd_input=solution_input,
+                timeout_ms=timeout_ms,
+                max_memory_bytes=max_memory_bytes,
+                input_file_name=input_file_name,
+                output_file_name=output_file_name,
+            )
 
         return result

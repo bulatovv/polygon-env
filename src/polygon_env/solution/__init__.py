@@ -120,4 +120,5 @@ __all__ = [
     'RunnerRuntimeError',
     'MemoryLimitExceed',
     'TimeLimitExceed',
+    'RunsSolution',
 ]
