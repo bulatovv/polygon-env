@@ -87,6 +87,7 @@ class LocalChecker(ChecksSolution):
                 temp_name = checker_executable.name
                 compiler_command = [
                     'c++',
+                    '-std=c++20',
                     '-I',
                     str(testlib_dir.resolve().parent),
                     '-o',

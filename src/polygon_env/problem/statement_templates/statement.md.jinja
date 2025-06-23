@@ -1,0 +1,63 @@
+# {{ sections['name'] }}
+
+{%- if problem.input_file_name or problem.output_file_name %}
+{%- if lang == 'russian' %}
+Имя входного файла: {{ problem.input_file_name or 'стандартный ввод' }}
+Имя выходного файла: {{ problem.output_file_name or 'стандартный вывод' }}
+{%- elif lang == 'english' %}
+Input file: {{ problem.input_file_name or 'standard input' }}
+Output file: {{ problem.output_file_name or 'standard output' }}
+{%- endif %}
+{%- endif %}
+{%- if lang == 'russian' %}
+Ограничение по времени: {{ problem.timeout_ms / 1000 }} с.
+Ограничение по памяти: {{ problem.max_memory_bytes|filesizeformat(binary=True) }}
+{%- elif lang == 'english' %}
+Time limit: {{ problem.timeout_ms / 1000 }} s.
+Memory limit: {{ problem.max_memory_bytes|filesizeformat(binary=True) }}
+{%- endif %}
+{{ sections['legend'] }}
+{%- if sections.get('input') %}
+{%- if lang == 'russian' %}
+## Формат входных данных
+{% elif lang == 'english' %}
+## Input
+{%- endif %}
+{{ sections['input'] }}
+{%- endif %}
+{%- if sections.get('output') %}
+{%- if lang == 'russian' %}
+## Формат выходных данных
+{%- elif lang == 'english' %}
+## Output
+{% endif %}
+{{ sections['output'] }}
+{% endif %}
+{%- if lang == 'russian' %}
+{%- if problem.is_interactive %}
+## Протокол взаимодействия
+{%- else %}
+## Примеры
+{%- endif %}
+| {{ problem.input_file_name or 'стандартный ввод' }} | {{ problem.output_file_name or 'стандартный вывод' }} |
+{%- elif lang == 'english' %}
+{%- if problem.is_interactive %}
+## Interaction
+{%- else %}
+## Examples
+{% endif %}
+| {{ problem.input_file_name or 'standard input' }} | {{ problem.output_file_name or 'standard output' }} |
+{%- endif %}
+|---|---|
+{%- for ex_input, ex_output in zip(*sections['examples']) %}
+| {{ ex_input|replace('\n', '<br>') }} | {{ ex_output|replace('\n', '<br>') }} |
+{%- endfor %}
+{%- if sections.get('notes') %}
+{%- if lang == 'russian' %}
+## Замечание
+{%- elif lang == 'english' %}
+## Notes
+{%- endif %}
+{{ sections['notes'] }}
+{%- endif -%}
+{# TODO: scoring #}
