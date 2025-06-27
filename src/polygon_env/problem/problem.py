@@ -1,4 +1,3 @@
-from tkinter import image_names
 import xml.etree.ElementTree as ET
 from functools import cached_property
 from pathlib import Path
