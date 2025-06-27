@@ -130,14 +130,14 @@ class Problem:
     @staticmethod
     def _get_images(problem_dir: Path) -> dict[str, bytes]:
         images_file_names = []
-        sections_dir = problem_dir / 'statement_sections' / 'russian'
+        sections_dir = problem_dir / 'statement-sections' / 'russian'
         if not sections_dir.exists():
-            sections_dir = problem_dir / 'statement_sections' / 'english'
+            sections_dir = problem_dir / 'statement-sections' / 'english'
 
         for pattern in ['*.jpg', '*.jpeg', '*.png']:
             images_file_names.extend(sections_dir.glob(pattern))
 
-        return {img_file_name.name: img_file_name.read() for img_file_name in images_file_names}
+        return {img_file_name.name: img_file_name.read_bytes() for img_file_name in images_file_names}
 
     @staticmethod
     def _parse_limits(xml_root: ET.ElementTree):

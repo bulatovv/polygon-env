@@ -23,6 +23,7 @@ dependencies = [
     "psutil>=7.0.0",
     "pypandoc-binary>=1.15",
     "pyyaml>=6.0.2",
+    "tqdm>=4.67.1",
 ]
 
 [dependency-groups]
